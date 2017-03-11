@@ -63,6 +63,11 @@ sub mkfs {
     return;
   }
 
+  # setting --force flag tells to overwrite any existing btrfs filesystem (if not set, mkfs.btrfs exits with an error unless the device is empty)
+  if ( $option{fstype} eq "btrfs") {
+      $add_opts .= " --force ";
+  }
+
   if ( ( exists $option{label} && $option{label} )
     || ( exists $option{lable} && $option{lable} ) )
   {

@@ -39,6 +39,7 @@ use base qw(Rex::Exporter);
 use vars qw(@EXPORT);
 
 use Data::Dumper;
+use File::Spec;
 use Rex::Logger;
 use Rex::Commands::Run;
 use Rex::Helper::Run;
@@ -234,7 +235,7 @@ sub partition {
   my $partprobe_error;
 
   for ( 1 .. 5 ) {
-    i_run "partprobe", fail_ok => 1;
+    i_run "partprobe $disk", fail_ok => 1;
     $partprobe_error = $?;
     last unless $partprobe_error;
     sleep 5;
@@ -242,15 +243,20 @@ sub partition {
 
   die $partprobe_error if $partprobe_error;
 
+  my ($vol, $dirs, $device_name) = File::Spec->splitpath($disk);
   # get the partition id
-  my @partitions = grep { /\Q$o_disk\Ep?\d+$/ } split /\n/,
+  my @partitions = grep { /\Q$device_name\Ep?\d+$/ } split /\n/,
     cat "/proc/partitions";
   my ( $part_prefix, $part_num ) =
-    ( $partitions[-1] =~ m/\Q$o_disk\E(p)?(\d+)/ );
+      ( $partitions[-1] =~ m/\Q$device_name\E(p)?(\d+)/ );
   $part_prefix ||= "";
 
   if ( !$part_num ) {
     die("Error getting partition number.");
+  }
+
+  if ( $option{partlabel} ) {
+    i_run "parted $disk name $part_num $option{partlabel}";
   }
 
   if ( $option{boot} ) {
@@ -283,7 +289,7 @@ sub partition {
   }
 
   # don't format partition if part of a vg
-  if ( !$option{vg} ) {
+  if ( exists $option{fstype} && $option{fstype} && !$option{vg} ) {
     mkfs "$disk$part_prefix$part_num",
       fstype => $option{fstype},
       label  => $option{label};
