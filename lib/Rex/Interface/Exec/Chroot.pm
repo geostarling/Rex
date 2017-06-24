@@ -4,7 +4,7 @@
 # vim: set ts=2 sw=2 tw=0:
 # vim: set expandtab:
 
-package Rex::Interface::Exec::Sudo;
+package Rex::Interface::Exec::Chroot;
 
 use strict;
 use warnings;
@@ -36,6 +36,8 @@ sub new {
 sub exec {
   my ( $self, $cmd, $path, $option ) = @_;
 
+  my $newroot = $option->{newroot};
+
   if ( exists $option->{cwd} ) {
     $cmd = "cd " . $option->{cwd} . " && $cmd";
   }
@@ -59,109 +61,35 @@ sub exec {
     $exec = Rex::Interface::Exec->create("Local");
     $file = Rex::Interface::File->create("Local");
   }
-  $shell = Rex::Interface::Shell->create("Sh"); # we're using sh for sudo
+  $shell = Rex::Interface::Shell->create("Sh"); # we're using sh for chroot
 
-######## envs setzen. aber erst nachdem wir wissen ob wir sh forcen duerfen
-  # if(exists $option->{env}) {
-  #   $shell->set_environment($option->{env});
-  # }
-
-  my $sudo_password = (
-    defined task() ? task->get_sudo_password : Rex::Config->get_sudo_password );
-  my $enc_pw;
-  my $random_file = "";
-
-  Rex::Logger::debug("Sudo: Executing: $cmd");
-
-  if ($sudo_password) {
-    my $random_string = get_random( length($sudo_password), 'a' .. 'z' );
-    my $crypt = $sudo_password ^ $random_string;
-
-    $random_file = get_tmp_file;
-
-    $file->open( '>', $random_file );
-    $file->write(<<EOF);
-#!/usr/bin/perl
-unlink \$0;
-
-for (0..255) {
-  \$escapes{chr(\$_)} = sprintf("%%%02X", \$_);
-}
-
-my \$txt = \$ARGV[0];
-
-\$txt=~ s/%([0-9A-Fa-f]{2})/chr(hex(\$1))/eg;
-
-my \$rnd = '$random_string';
-print \$txt ^ \$rnd;
-print "\\n"
-
-EOF
-
-    $file->close;
-
-    $enc_pw = Rex::Helper::Encode::url_encode($crypt);
-  }
-  else {
-    $enc_pw = "";
-  }
+  Rex::Logger::debug("Chroot: Executing: $cmd");
 
   #my $sudo_options     = Rex::get_current_connection()->{sudo_options};
-  my $sudo_options =
-    Rex::get_current_connection_object()->get_current_sudo_options;
-  my $sudo_options_str = "";
-  if ( exists $sudo_options->{user} ) {
-    $sudo_options_str .= " -u " . $sudo_options->{user};
-  }
+  my $chroot_options =
+      Rex::get_current_connection_object()->get_current_chroot_options;
+  my $chroot_newroot = $chroot_options->{newroot};
+  my $chroot_options_str = "";
+  #if ( exists $chroot_options->{user} ) {
+  #    $chroot_options_str .= " -u " . $chroot_options->{user};
+  #}
 
-  if ( Rex::Config->get_sudo_without_locales() ) {
-    Rex::Logger::debug(
-      "Using sudo without locales. If the locale is NOT C or en_US it will break many things!"
-    );
-    $option->{no_locales} = 1;
-  }
+  my $chroot_command = "chroot $chroot_options_str $chroot_newroot";
 
-  my $sudo_command = "sudo $sudo_options_str -p '' -S";
+  $shell->set_locale("C");
+  $shell->path($path);
 
-  if ( Rex::Config->get_sudo_without_sh() ) {
-    Rex::Logger::debug(
-      "Using sudo without sh will break things like file editing.");
-
-    # $option->{no_sh} = 1;
-    $shell->set_inner_shell(0);
-    $shell->set_sudo_env(1);
-
-    if ( exists $option->{env} ) {
-      $shell->set_environment( $option->{env} );
-    }
-
-    if ($enc_pw) {
-
-    # $option->{format_cmd} =
-    #   "perl $random_file '$enc_pw' | sudo $sudo_options_str -p '' -S {{CMD}}";
-      $sudo_command = "perl $random_file '$enc_pw' 2>/dev/null | $sudo_command";
-    }
-
-    # else {
-    #   $option->{format_cmd} = "sudo $sudo_options_str -p '' -S {{CMD}}";
-    # }
-  }
-  else {
-
-    $shell->set_locale("C");
-    $shell->path($path);
-
-    if ( Rex::Config->get_source_global_profile ) {
+  if ( Rex::Config->get_source_global_profile ) {
       $shell->source_global_profile(1);
-    }
+  }
 
-    if ( Rex::Config->get_source_profile ) {
+  if ( Rex::Config->get_source_profile ) {
       $shell->source_profile(1);
-    }
+  }
 
-    if ( exists $option->{env} ) {
+  if ( exists $option->{env} ) {
       $shell->set_environment( $option->{env} );
-    }
+  }
 
     # escape some special shell things
     # $option->{preprocess_command} = sub {
@@ -171,7 +99,7 @@ EOF
     #   $_cmd =~ s/\$/\\\$/gms;
     # };
 
-    $shell->set_inner_shell(1);
+  $shell->set_inner_shell(1);
 
     # $cmd =~ s/\\/\\\\/gms;
     # $cmd =~ s/"/\\"/gms;
@@ -180,23 +108,10 @@ EOF
 # Calling sudo with sh(1) in this case we don't need to respect current user shell, pass _force_sh flag to ssh layer
 # $option->{_force_sh} = 1;
 
-    if ($enc_pw) {
-      $sudo_command = "perl $random_file '$enc_pw' 2>/dev/null | $sudo_command";
-
-# $option->{format_cmd} =
-#   "perl $random_file '$enc_pw' | sudo $sudo_options_str -p '' -S sh -c \"{{CMD}}\"";
-    }
-
-    # else {
-    #   $option->{format_cmd} =
-    #     "sudo $sudo_options_str -p '' -S sh -c \"{{CMD}}\"";
-    # }
-  }
-
-  $option->{prepend_command} = $sudo_command;
+  $option->{prepend_command} = $chroot_command;
 
   my $real_exec = $shell->exec( $cmd, $option );
-  Rex::Logger::debug("sudo: exec: $real_exec");
+  Rex::Logger::debug("chroot: exec: $real_exec");
 
   return $exec->direct_exec( $real_exec, $option );
 }

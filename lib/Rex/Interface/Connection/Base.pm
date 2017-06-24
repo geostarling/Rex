@@ -119,4 +119,43 @@ sub run_sudo_unmodified {
   $self->pop_sudo_options();
 }
 
+sub push_chroot_options {
+    my ( $self, @option ) = @_;
+    if ( ref $option[0] eq "HASH" ) {
+        push @{ $self->{__chroot_options__} }, $option[0];
+    }
+    else {
+        push @{ $self->{__chroot_options__} }, {@option};
+    }
+}
+
+sub get_current_chroot_options {
+    my ($self) = @_;
+    return $self->{__chroot_options__}->[-1];
+}
+
+sub push_use_chroot {
+    my ( $self, $use ) = @_;
+    push @{ $self->{__use_chroot__} }, $use;
+}
+
+sub get_current_use_chroot {
+    my ($self) = @_;
+
+    if ( $self->{is_chroot} ) {
+        return 1;
+    }
+    return $self->{__use_chroot__}->[-1];
+}
+
+sub pop_chroot_options {
+    my ($self) = @_;
+    pop @{ $self->{__chroot_options__} };
+}
+
+sub pop_use_chroot {
+    my ($self) = @_;
+    pop @{ $self->{__use_chroot__} };
+}
+
 1;

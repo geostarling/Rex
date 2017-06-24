@@ -184,6 +184,10 @@ sub get_connection_type {
     return "Sudo";
   }
 
+  if ( $self->{is_chroot} && $self->{is_chroot} == 1 ) {
+      return "Chroot";
+  }
+
   if ( Rex::is_ssh() && !Rex::is_sudo() ) {
     $type = "SSH";
   }

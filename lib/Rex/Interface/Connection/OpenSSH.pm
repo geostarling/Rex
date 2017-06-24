@@ -229,11 +229,13 @@ sub get_connection_type {
     return "Sudo";
   }
 
-  if ( Rex::is_ssh() && !Rex::is_sudo() ) {
+  if ( Rex::is_ssh() && !Rex::is_sudo()  && !Rex::is_chroot()) {
     $type = "OpenSSH";
   }
   elsif ( Rex::is_sudo() ) {
     $type = "Sudo";
+  } elsif ( Rex::is_chroot() ) {
+    return "Chroot";
   }
 
   return $type;
