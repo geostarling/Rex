@@ -407,6 +407,22 @@ sub is_sudo {
   return 0;
 }
 
+
+=head2 is_chroot
+
+    Returns 1 if the current operation is executed within chroot.
+
+=cut
+
+sub is_chroot {
+
+    if ( $CONNECTION_STACK[-1] ) {
+        return $CONNECTION_STACK[-1]->{conn}->get_current_use_chroot;
+    }
+
+    return 0;
+}
+
 sub global_sudo {
   my ($on) = @_;
   $GLOBAL_SUDO = $on;

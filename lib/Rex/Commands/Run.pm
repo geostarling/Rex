@@ -56,7 +56,7 @@ BEGIN {
 use vars qw(@EXPORT);
 use base qw(Rex::Exporter);
 
-@EXPORT = qw(run can_run sudo);
+@EXPORT = qw(run can_run sudo chroot);
 
 =head2 run($command [, $callback], %options)
 
@@ -430,5 +430,63 @@ sub sudo {
 
   return $ret;
 }
+
+=head2 chroot
+
+Run a single command, a code block, or all commands inside chrooted environment.
+
+    FIXME
+
+ say sudo 'id';                # passing a remote command directly
+ say sudo { command => 'id' }; # passing anonymous hashref
+ 
+ say sudo { command => 'id', user => 'different' }; # run a single command with sudo as different user
+ 
+ # running a single command with sudo as different user, and `cd` to another directory too
+ say sudo { command => 'id', user => 'different', cwd => '/home/different' };
+
+Passing an anonymous I<coderef> to C<chroot> allows for running the commands in the sub with chroot:
+
+ chroot "/mnt/newroot", sub {
+     service 'nginx' => 'restart';
+     say run 'id';
+ };
+
+=cut
+
+sub chroot {
+  my ( $newroot, $cmd ) = @_;
+
+  my $options;
+  if ( ref $cmd eq "HASH" ) {
+    $options = $cmd;
+    $cmd     = $options->{command};
+  }
+
+  if ( ! ($newroot ne "") ) {
+      die("Missing required newroot parameter in chroot command.");
+  }
+
+  $options->{newroot} = $newroot;
+
+  Rex::get_current_connection_object()->push_use_chroot(1);
+  Rex::get_current_connection_object()->push_chroot_options( %{$options} );
+
+  my $ret;
+
+  # if sudo is used with a code block
+  if ( ref($cmd) eq "CODE" ) {
+    $ret = &$cmd();
+  }
+  else {
+    $ret = i_run( $cmd, fail_ok => 1 );
+  }
+
+  Rex::get_current_connection_object()->pop_use_chroot();
+  Rex::get_current_connection_object()->pop_chroot_options();
+
+  return $ret;
+}
+
 
 1;
