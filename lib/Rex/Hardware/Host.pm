@@ -159,6 +159,10 @@ sub get_operating_system {
     return "ALT";
   }
 
+  if ( is_file("/etc/alpine-release") ) {
+    return "Alpine";
+  }
+
   if ( is_file("/etc/redhat-release") ) {
     my $fh      = file_read("/etc/redhat-release");
     my $content = $fh->read_all;
